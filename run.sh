@@ -13,4 +13,5 @@ build_and_run() {
 }
 
 # Days
-build_and_run 1
+#build_and_run 1
+build_and_run 2
