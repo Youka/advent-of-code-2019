@@ -6,7 +6,7 @@ mkdir -p out
 # Compile code and run executable
 build_and_run() {
     echo "##### Day $1 #####"
-    rustc day$1/main.rs --edition 2018 -O -v -o out/day$1
+    rustc day$1/main.rs --edition 2018 -O -v -o out/day$1 && \
     cat day$1/input.txt | ./out/day$1
     echo "##################"
     echo
@@ -14,4 +14,5 @@ build_and_run() {
 
 # Days
 #build_and_run 1
-build_and_run 2
+#build_and_run 2
+build_and_run 3
