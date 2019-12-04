@@ -1,7 +1,8 @@
+// Traits
 use std::str::FromStr;
 
 // Direction
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug,Clone,Copy,Eq,PartialEq)]
 enum Direction {
     Up,
     Down,
@@ -22,7 +23,7 @@ impl FromStr for Direction {
 }
 
 // Move
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug,Clone,Copy,Eq,PartialEq)]
 struct Move {
     pub direction: Direction,
     pub units: isize
@@ -31,7 +32,7 @@ impl FromStr for Move {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() < 2 {
-            return Err(format!("String is too short: {}", s));
+            return Err(format!("String is too short for a direction + units: {}", s));
         }
         let (direction, units) = s.split_at(1);
         Ok(Move {
@@ -40,32 +41,41 @@ impl FromStr for Move {
         })
     }
 }
+impl Move {
+    pub fn len(&self) -> usize {
+        self.units.abs() as usize
+    }
+}
 
 // Point
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug,Clone,Copy,Eq,PartialEq)]
 struct Point(isize,isize);
 impl Point {
-    pub fn movement(&mut self, mov: Move) -> &mut Self {
+    pub fn movement(&mut self, mov: Move) {
         match mov.direction {
             Direction::Up => self.1 += mov.units,
             Direction::Down => self.1 -= mov.units,
             Direction::Left => self.0 -= mov.units,
             Direction::Right => self.0 += mov.units
         }
-        self
     }
-    pub fn len(&self) -> usize {
+    pub fn distance(&self) -> usize {
         self.0.abs() as usize + self.1.abs() as usize
     }
 }
 
 // Line
-#[derive(Debug,Clone,Copy)]
+#[derive(Debug,Clone,Copy,Eq,PartialEq)]
 struct Line {
     pub point: Point,
     pub mov: Move
 }
 impl Line {
+    fn end_point(&self) -> Point {
+        let mut point = self.point.clone();
+        point.movement(self.mov);
+        point
+    }
     pub fn intersect(&self, other: &Line) -> Option<Point> {
         // Find horizontal and vertical line
         let mut hline = None;
@@ -80,17 +90,32 @@ impl Line {
         };
         // Lines orthogonal?
         if let (Some(hline), Some(vline)) = (hline, vline) {
-            // Line end points
-            let mut hline_end_point = hline.point.clone();
-            hline_end_point.movement(hline.mov);
-            let mut vline_end_point = vline.point.clone();
-            vline_end_point.movement(vline.mov);
-            // Line ranges
+            // Lines intersect?
+            let hline_end_point = hline.end_point();
+            let vline_end_point = vline.end_point();
             let hrange = hline.point.0.min(hline_end_point.0)..=hline.point.0.max(hline_end_point.0);
             let vrange = vline.point.1.min(vline_end_point.1)..=vline.point.1.max(vline_end_point.1);
-            // Lines intersect?
             if hrange.contains(&vline.point.0) && vrange.contains(&hline.point.1) {
-                return Some(Point(hline.point.1, vline.point.0))
+                return Some(Point(vline.point.0, hline.point.1))
+            }
+        }
+        None
+    }
+    pub fn point_inner_distance(&self, point: &Point) -> Option<usize> {
+        match self.mov.direction {
+            Direction::Up | Direction::Down => if point.0 == self.point.0 {
+                let end_point = self.end_point();
+                let vrange = self.point.1.min(end_point.1)..=self.point.1.max(end_point.1);
+                if vrange.contains(&point.1) {
+                    return Some((point.1 - self.point.1).abs() as usize)
+                }
+            },
+            Direction::Left | Direction::Right => if point.1 == self.point.1 {
+                let end_point = self.end_point();
+                let hrange = self.point.0.min(end_point.0)..=self.point.0.max(end_point.0);
+                if hrange.contains(&point.0) {
+                    return Some((point.0 - self.point.0).abs() as usize)
+                }
             }
         }
         None
@@ -109,8 +134,18 @@ fn wire_lines_from_str(s: &str) -> Vec<Line> {
         })
         .collect()
 }
+fn wire_lines_distance_to_point(lines: &[Line], point: &Point) -> Option<usize> {
+    let mut distance = 0;
+    for line in lines {
+        if let Some(point_distance) = line.point_inner_distance(point) {
+            return Some(distance + point_distance);
+        }
+        distance += line.mov.len();
+    }
+    None
+}
 
-// Find the closest intersection point of wires from input
+// Day 3 puzzle
 fn main() {
     use std::io::{stdin,BufRead};
     // Read two wires from input
@@ -125,16 +160,28 @@ fn main() {
     // Convert wires into lines
     let wire1_lines = wire_lines_from_str(&lines[0]);
     let wire2_lines = wire_lines_from_str(&lines[1]);
-    // Find the nearest wire intersection to origin
+    // Part 1: Find the nearest wire intersection to origin
+    // Part 2: Find the shortest (& combined) way of intersecting wires from origin
     let mut nearest_distance = None;
+    let mut shortest_distance = None;
     for wire1_line in &wire1_lines {
         for wire2_line in &wire2_lines {
-            if let Some(point) =  wire1_line.intersect(&wire2_line) {
-                let distance = point.len();
-                if distance != 0 {
+            if let Some(point) = wire1_line.intersect(&wire2_line) {
+                let point_distance = point.distance();
+                if point_distance != 0 {
+                    // Part 1
                     match nearest_distance {
-                        None => nearest_distance = Some(distance),
-                        Some(old_distance) if old_distance > distance => nearest_distance = Some(distance),
+                        None => nearest_distance = Some(point_distance),
+                        Some(old_point_distance) if old_point_distance > point_distance => nearest_distance = Some(point_distance),
+                        _ => ()
+                    }
+                    // Part 2
+                    let wire_distance =
+                        wire_lines_distance_to_point(&wire1_lines, &point).expect("Point should be on wire 1!") +
+                        wire_lines_distance_to_point(&wire2_lines, &point).expect("Point should be on wire 2!");
+                    match shortest_distance {
+                        None => shortest_distance = Some(wire_distance),
+                        Some(old_wire_distance) if old_wire_distance > wire_distance => shortest_distance = Some(wire_distance),
                         _ => ()
                     }
                 }
@@ -142,4 +189,5 @@ fn main() {
         }
     }
     println!("Nearest distance: {:?}", nearest_distance);
+    println!("Shortest distance: {:?}", shortest_distance);
 }
