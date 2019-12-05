@@ -1,49 +1,50 @@
 // Imports
 use std::{
+    collections::HashMap,
     io::{stdin,Read},
     ops::RangeInclusive
 };
 
 // Input
-fn read_input_range() -> RangeInclusive<u32> {
+fn read_input_range() -> Option<RangeInclusive<u32>> {
     let mut input = String::new();
-    stdin().lock().read_to_string(&mut input).expect("No input?!");
-    if let Some(separator) = input.find('-') {
-        input[..separator].parse::<u32>().expect("Range start isn't a number!") ..=
-        input[separator+1..].parse::<u32>().expect("Range end isn't a number!")
-    } else {
-        panic!("Range separator not found!");
-    }
+    stdin().lock().read_to_string(&mut input).ok()?;
+    let separator = input.find('-')?;
+    Some( input[..separator].parse::<u32>().ok()? ..= input[separator+1..].parse::<u32>().ok()? )
 }
 
 // Checks
-fn is_six_digit(num: u32) -> bool {
-    num < 1_000_000
+fn has_six_digits(num: u32) -> bool {
+    (100_000..=999_999).contains(&num)
 }
-fn has_2_adjacent_digits(num: u32) -> bool {
-    let chars = num.to_string().chars().collect::<Vec<char>>();
-    chars.first().and_then(|first_char|
-        chars.iter()
+fn has_2_adjacent_digits(digits: &[u8]) -> bool {
+    digits.first().and_then(|first_digit|
+        digits.iter()
             .skip(1)
-            .try_fold(first_char, |last_char, character| if character == last_char {None} else {Some(character)} )
+            .try_fold(first_digit, |last_digit, digit| if digit == last_digit {None} else {Some(digit)} )
             .map_or(Some(()), |_| None )
     ).is_some()
 }
-fn has_increasing_digits(num: u32) -> bool {
-    let chars = num.to_string().chars().collect::<Vec<char>>();
-    chars.first().and_then(|first_char|
-        chars.iter()
+fn has_increasing_digits(digits: &[u8]) -> bool {
+    digits.first().and_then(|first_digit|
+        digits.iter()
             .skip(1)
-            .try_fold(first_char, |last_char, character| if character >= last_char {Some(character)} else {None} )
+            .try_fold(first_digit, |last_digit, digit| if digit >= last_digit {Some(digit)} else {None} )
     ).is_some()
+}
+fn has_digit_twice(digits: &[u8]) -> bool {
+    let mut map = HashMap::with_capacity(2);
+    digits.iter().for_each(|digit| *map.entry(digit).or_insert(0) += 1 );
+    map.iter().any(|(_,digit_number)| *digit_number == 2 )
 }
 
 // Day 4
 fn main() {
-    println!(
-        "Hits: {}",
-        read_input_range().filter(|num| {
-            is_six_digit(*num) && has_2_adjacent_digits(*num) && has_increasing_digits(*num)
-        }).count()
-    );
+    let hits = read_input_range().expect("Input incorrect!")
+        .filter(|num| has_six_digits(*num) )
+        .map(|num| num.to_string().into_bytes() )
+        .filter(|digits| has_2_adjacent_digits(digits) && has_increasing_digits(digits) )
+        .collect::<Vec<_>>();
+    println!("Part 1: {}", hits.len());
+    println!("Part 2: {}", hits.iter().filter(|digits| has_digit_twice(digits) ).count());
 }
