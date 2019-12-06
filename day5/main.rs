@@ -14,20 +14,21 @@ impl From<(isize, u8)> for ParameterMode {
 }
 
 // Converter
+fn get_intcode(intcode: &[isize], pos: usize) -> isize {
+    *intcode.get(pos).expect(&format!("Parameter at position {} missing!", pos))
+}
 fn intcode_to_index(intcode: &[isize], pos: usize) -> usize {
     use std::convert::TryFrom;
-    usize::try_from(
-        *intcode.get(pos).expect(&format!("Parameter at position {} missing!", pos))
-    ).expect(&format!("Parameter at {} not an unsigned integer!", pos))
+    usize::try_from(get_intcode(intcode, pos)).expect(&format!("Parameter at {} not an unsigned integer!", pos))
 }
-fn get_intcode_parameter(intcode: &[isize], pos: usize, param_mode: ParameterMode) -> isize {
+fn get_intcode_parametrized(intcode: &[isize], pos: usize, param_mode: ParameterMode) -> isize {
     match param_mode {
         ParameterMode::POSITION => intcode[intcode_to_index(intcode, pos)],
-        ParameterMode::IMMEDIATE => *intcode.get(pos).expect(&format!("Parameter at position {} missing!", pos))
+        ParameterMode::IMMEDIATE => get_intcode(intcode, pos)
     }
 }
 
-// Intcode processors
+// Intcode processing
 fn process_intcode(intcode: &mut [isize], input: isize) -> Vec<isize> {
     // Output buffer
     let mut output = vec![];
@@ -39,32 +40,54 @@ fn process_intcode(intcode: &mut [isize], input: isize) -> Vec<isize> {
             // Add or multiply
             1 | 2 => {
                 let (param1, param2) = (
-                    get_intcode_parameter(intcode, pos+1, ParameterMode::from((param_modes, 0))),
-                    get_intcode_parameter(intcode, pos+2, ParameterMode::from((param_modes, 1)))
+                    get_intcode_parametrized(intcode, pos+1, ParameterMode::from((param_modes, 0))),
+                    get_intcode_parametrized(intcode, pos+2, ParameterMode::from((param_modes, 1)))
                 );
                 intcode[intcode_to_index(intcode, pos+3)] = match instruction {
                     1 => param1 + param2,
                     2 => param1 * param2,
                     _ => unreachable!()
                 };
-                pos += 3;
+                pos += 4;
             }
             // Input
             3 => {
                 intcode[intcode_to_index(intcode, pos+1)] = input;
-                pos += 1;
+                pos += 2;
             }
             // Output
             4 => {
-                output.push(get_intcode_parameter(intcode, pos+1, ParameterMode::from((param_modes, 0))));
-                pos += 1;
+                output.push(get_intcode_parametrized(intcode, pos+1, ParameterMode::from((param_modes, 0))));
+                pos += 2;
+            }
+            // Jump
+            5 | 6 => {
+                let param1 = get_intcode_parametrized(intcode, pos+1, ParameterMode::from((param_modes, 0)));
+                if instruction == 5 && param1 != 0 || instruction == 6 && param1 == 0 {
+                    pos = get_intcode_parametrized(intcode, pos+2, ParameterMode::from((param_modes, 1))) as usize;
+                } else {
+                    pos += 3;
+                }
+            }
+            // Less-than | equals
+            7 | 8 => {
+                let (param1, param2) = (
+                    get_intcode_parametrized(intcode, pos+1, ParameterMode::from((param_modes, 0))),
+                    get_intcode_parametrized(intcode, pos+2, ParameterMode::from((param_modes, 1)))
+                );
+                intcode[intcode_to_index(intcode, pos+3)] =
+                    if instruction == 7 && param1 < param2 || instruction == 8 && param1 == param2 {
+                        1
+                    } else {
+                        0
+                    };
+                pos += 4;
             }
             // Halt!
             99 => break,
             // Invalid!
             _ => panic!("Invalid operation code: {}", opcode)
         }
-        pos += 1;
     }
     // Return output, ending with diagnostic code
     output
@@ -83,5 +106,7 @@ fn read_input_intcode() -> Vec<isize> {
 
 // Day 5
 fn main() {
-    println!("Intcode output: {:?}", process_intcode(&mut read_input_intcode(), 1));
+    let mut intcode = read_input_intcode();
+    println!("[Part 1] Intcode output: {:?}", process_intcode(&mut intcode.clone(), 1));
+    println!("[Part 2] Intcode output: {:?}", process_intcode(&mut intcode, 5));
 }
