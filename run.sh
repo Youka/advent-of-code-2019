@@ -17,4 +17,5 @@ build_and_run() {
 #build_and_run 2
 #build_and_run 3
 #build_and_run 4
-build_and_run 5
+#build_and_run 5
+build_and_run 6
