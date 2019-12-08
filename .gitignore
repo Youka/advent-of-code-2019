@@ -2,3 +2,10 @@
 /target/
 /out/
 /dist/
+
+# Project
+.vscode/
+.idea/
+Cargo.lock
+package-lock.json
+node_modules/
