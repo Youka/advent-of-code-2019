@@ -44,6 +44,7 @@ mod intcode {
                 input
             }
         }
+        #[allow(dead_code)]
         pub fn input_mut(&mut self) -> &mut Vec<isize> {
             &mut self.input
         }
@@ -67,7 +68,7 @@ mod intcode {
                     }
                     Ok(rel_pos as usize)
                 }
-                ParameterMode::IMMEDIATE => Err(format!("Immediate intcode at {} can't be an pos!", pos))
+                ParameterMode::IMMEDIATE => Err(format!("Immediate intcode at {} can't be a position!", pos))
             }
         }
         fn get_intcode_unpacked(&mut self, pos: usize, param_mode: ParameterMode) -> Result<isize,String> {
@@ -174,9 +175,16 @@ fn part1(intcode: &[isize]) -> isize {
         IntcodeResult::HALT => panic!("Intcode processor halted unexpectly!")
     }
 }
+fn part2(intcode: &[isize]) -> isize {
+    match Processor::new(intcode.to_vec(), vec![2]).process().expect("Intcode processor failed!") {
+        IntcodeResult::OUTPUT(out) => out,
+        IntcodeResult::HALT => panic!("Intcode processor halted unexpectly!")
+    }
+}
 
 // Day 9
 fn main() {
     let intcode_input = read_input_intcode();
-    println!("[Part 1] Keycode: {}", part1(&intcode_input));
+    println!("[Part 1] Keycode: {}", part1(&intcode_input.clone()));
+    println!("[Part 2] Distress signal: {}", part2(&intcode_input));
 }
