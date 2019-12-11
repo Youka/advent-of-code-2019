@@ -1,80 +1,107 @@
-// Map
-type Dimension = (u16,u16);
-struct AsteroidMap {
-    data: Vec<u8>,
-    dimension: Dimension
-}
-impl AsteroidMap {
-    pub fn new(grid: &Vec<Vec<u8>>) -> Result<Self,&'static str> {
-        // Get dimension
-        let width = grid.first().and_then(|first_row|
-            if grid.iter().skip(1).all(|row| row.len() == first_row.len()) {Some(first_row.len())} else {None}
-        ).ok_or("Invalid map format!")?;
-        let height = grid.len();
-        // Create new instance
-        Ok(Self{
-            data: grid.concat(),
-            dimension: (width as u16,height as u16)
-        })
-    }
-    #[allow(dead_code)]
-    pub fn dimension(&self) -> Dimension {
-        self.dimension
-    }
-    pub fn data(&self) -> &[u8] {
-        &self.data
-    }
-    pub fn index_to_xy(&self, index: usize) -> Dimension {
-        ( (index % self.dimension.0 as usize) as u16, (index / self.dimension.0 as usize) as u16 )
-    }
-    #[allow(dead_code)]
-    pub fn xy_to_index(&self, xy: Dimension) -> usize {
-        xy.1 as usize * self.dimension.0 as usize + xy.0 as usize
-    }
-}
-
 // Helpers
-fn point_on_line(line: (Dimension, Dimension), point: Dimension) -> bool {
-    let l1_p = ( ((line.0).0 as f32 - point.0 as f32), ((line.0).1 as f32 - point.1 as f32) );
-    let l1_l2 = ( ((line.0).0 as f32 - (line.1).0 as f32), ((line.0).1 as f32 - (line.1).1 as f32) );
-    let angle_l1_p = l1_p.0.atan2(l1_p.1);
-    let angle_l1_l2 = l1_l2.0.atan2(l1_l2.1);
-    let distance_l1_p = l1_p.0.hypot(l1_p.1);
-    let distance_l1_l2 = l1_l2.0.hypot(l1_l2.1);
-    angle_l1_p == angle_l1_l2 && distance_l1_p <= distance_l1_l2
+type Point = (u16,u16);
+fn angle_along_points(p1: Point, p2: Point) -> f32 {
+    (p2.0 as f32 - p1.0 as f32).atan2(p1.1 as f32 - p2.1 as f32)
+}
+fn distance_between_points(p1: Point, p2: Point) -> f32 {
+    (p2.0 as f32 - p1.0 as f32).hypot(p2.1 as f32 - p1.1 as f32)
+}
+fn point_on_line(line: (Point, Point), point: Point) -> bool {
+    angle_along_points(line.0, point) == angle_along_points(line.0, line.1) &&
+    distance_between_points(line.0, point) <= distance_between_points(line.0, line.1)
 }
 
 // Parts
-fn part1(map: &AsteroidMap) -> Option<u32> {
-    // Collect asteroid positions
-    let asteroids = map.data().into_iter()
-        .enumerate()
-        .filter(|(_,field)| *field == &b'#' )
-        .map(|(index, _)| map.index_to_xy(index) )
-        .collect::<Vec<_>>();
+fn part1(asteroids: &[Point]) -> Option<(&Point,u32)> {
+    // Find observables per asteroid
+    asteroids.iter().map(|asteroid|
+        (
+            asteroid,
+            // Check possible observings
+            asteroids.iter().filter(|observable| *observable != asteroid ).fold(0, |mut amount, observable| {
+                // Any blockade between asteroid and possible observable?
+                if !asteroids.iter().filter(|blockade| *blockade != observable && *blockade != asteroid ).any(|blockade| point_on_line((*asteroid, *observable), *blockade) ) {
+                    amount += 1;
+                }
+                amount
+            })
+        )
+    )
     // Find asteroid with most observings
-    asteroids.iter().map(|observer|
-        // Check possible observing
-        asteroids.iter().filter(|observable| *observable != observer ).fold(0_u32, |mut amount, observable| {
-            // Any blockage between observer and possible observable?
-            if !asteroids.iter().filter(|blockade| *blockade != observable && *blockade != observer ).any(|blockade| point_on_line((*observer, *observable), *blockade) ) {
-                amount += 1;
+    .max_by(|o1, o2| o1.1.cmp(&o2.1) )
+}
+fn part2<'a>(asteroids: &'a [Point], observer: &Point) -> Option<u16> {
+    use std::{
+        cmp::Ordering,
+        f32::consts::PI
+    };
+    // Get all targets by coordinate, angle and distance
+    let mut targets = asteroids.iter()
+        .filter(|asteroid| *asteroid != observer )
+        .map(|asteroid| (
+            asteroid,
+            {
+                let mut angle = angle_along_points(*observer, *asteroid);
+                if angle < 0.0 {
+                    angle = 2.0 * PI + angle;
+                }
+                angle
+            },
+            distance_between_points(*observer, *asteroid)
+        ))
+        .collect::<Vec<_>>();
+    // Sort targets clockwise first, distance second
+    targets.sort_by(|t1, t2| {
+        let cmp_angles = t1.1.partial_cmp(&t2.1).unwrap();
+        match cmp_angles {
+            Ordering::Equal => t1.2.partial_cmp(&t2.2).unwrap(),
+            _ => cmp_angles
+        }
+    });
+    // Find 200th target hit
+    let mut hits = vec![];
+    let mut angle = -1.0;
+    for target in targets.iter().cycle() {
+        if !hits.contains(&target) && target.1 != angle {
+            hits.push(target);
+            if hits.len() == 200 {
+                return Some((target.0).0 * 100 + (target.0).1);
             }
-            amount
-        })
-    ).max()
+            angle = target.1;
+        }
+    }
+    None
 }
 
 // Day 10
 fn main() {
-    // Read input
-    use std::io::{stdin,BufRead};
-    let map = AsteroidMap::new(
-        &stdin().lock()
-            .lines()
-            .map(|result_line| result_line.expect("Text line expected!").into_bytes() )
-            .collect()
-    ).expect("Couldn't construct AsteroidMap from input!");
+    // Input
+    use std::io::{stdin,Read};
+    let asteroids = {
+        let mut pos = (0,0);
+        stdin().lock()
+            .bytes()
+            .map(Result::unwrap)
+            .filter_map(|byte|
+                match byte {
+                    b'#' => {
+                        let asteroid = Some(pos.clone());
+                        pos.0 += 1;
+                        asteroid
+                    }
+                    b'\n' => {
+                        pos = (0,pos.1+1);
+                        None
+                    }
+                    _ => {
+                        pos.0 += 1;
+                        None
+                    }
+                }
+            ).collect::<Vec<_>>()
+    };
     // Puzzles
-    println!("[Part 1] Asteroids visible: {:?}", part1(&map));
+    let observer = part1(&asteroids).expect("Observer needs to be found!");
+    println!("[Part 1] Asteroids visible: {:?}", observer.1);
+    println!("[Part 2] 200th hit: {:?}", part2(&asteroids, observer.0));
 }
