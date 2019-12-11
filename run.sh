@@ -29,4 +29,5 @@ build_and_run() {
 #build_and_run 6
 #build_and_run 7
 #build_and_run 8
-build_and_run 9
+#build_and_run 9
+build_and_run 10
